@@ -19,13 +19,16 @@ class Embarcado:
     def __init__(self):
         # Inicializa os pinos para controle dos motores
         self.pino_motor_1 = Pin(15)
+        self.pino_motor_2 = Pin(4)
         self.pino_led_esp32 = Pin(2)
 
         # Inicializa PWM nos pinos correspondentes
-        self.motor = PWM(self.pino_motor_1, freq=1000, duty=0)
+        self.motor_1 = PWM(self.pino_motor_1, freq=1000, duty=0)
+        self.motor_2 = PWM(self.pino_motor_2, freq=1000, duty=0)
         self.led = PWM(self.pino_led_esp32, freq=1000, duty=0)
 
         # Inicializa os tópicos MQTT
+        self.TOPICO_SETUP = b"setup"
         self.TOPICO_LIGAR_MOTOR = b"ligar_motor"
         self.TOPICO_DESLIGAR_MOTOR = b"desligar_motor"
         self.TOPICO_LIGAR = b"ligar"
@@ -54,9 +57,25 @@ class Embarcado:
         print(f"Dados recebidos: TÓPICO = {topico}, MENSAGEM = {mensagem}")
         msg = mensagem.decode()
 
-        if topico == self.TOPICO_DESLIGAR:
+        if topico == self.TOPICO_SETUP:
             if msg == "off":
                 self.desligar()
+
+            elif msg == "on":
+                self.ligar()
+
+            elif msg == "off_motores":
+                self.ligar_motores()
+
+            elif msg == "on_motores":
+                self.desligar_motores()
+
+            elif msg == "off_led":
+                self.desligar_leds()
+
+            elif msg == "on_led":
+                self.ligar_leds()
+
 
         if topico == self.TOPICO_LIGAR:
             if msg == "on":
@@ -64,19 +83,21 @@ class Embarcado:
 
         if topico == self.TOPICO_LIGAR_MOTOR:
             if msg == "on":
-                self.ligar_motor()
+                self.ligar_motores()
 
         elif topico == self.TOPICO_DESLIGAR_MOTOR:
             if msg == "on":
-                self.desligar_motor()
+                self.desligar_motores()
 
-    def ligar_motor(self):
+    def ligar_motores(self):
         """Ligar motor"""
-        self.motor.duty(1023)
+        self.motor_1.duty(1023)
+        self.motor_2.duty(1023)
 
-    def desligar_motor(self):
+    def desligar_motores(self):
         """Desligar motor"""
-        self.motor.duty(0)
+        self.motor_1.duty(0)
+        self.motor_2.duty(0)
 
     def ligar(self):
         """Ligar ESP32"""
@@ -86,7 +107,14 @@ class Embarcado:
         """Desligar ESP32"""
         self.led.duty(0)
 
+    def setup(self):
+        """Configurações iniciais do dispositivo embarcado."""
+        self.led.duty(0)
+        self.motor_1.duty(0)
+        self.motor_2.duty(0)
+
     def executar(self):
+
         """Método principal para executar as operações do dispositivo embarcado."""
         # Conecta ao WiFi
         wifi = self.conectar_wifi()
@@ -99,6 +127,8 @@ class Embarcado:
         # Conecta ao broker MQTT
         cliente = MQTTClient(NOME_CLIENTE, URL_BROKER_MQTT, keepalive=60)
         time.sleep(3)
+
+        self.setup()
 
         while True:
             try:
