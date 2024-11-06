@@ -3,8 +3,6 @@
 ## Instalação do Node-RED
 
 ```bash
-
-```bash
 brew link mosquitto
 brew install mosquitto-clients
 sudo install mosquitto
@@ -29,3 +27,6 @@ node-red
 ```bash
 http://localhost:1880/ui
 ```
+
+## Notações
+- Conectar o roteador antes de iniciar o node-red
