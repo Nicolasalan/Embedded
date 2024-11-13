@@ -37,9 +37,12 @@ class Embarcado:
         self.TOPICO_LIGAR = b"ligar"  # Defina o tópico para ligar
         self.TOPICO_MOVER = b"controle/motores"  # Defina o tópico para virar à direita
         self.TOPICO_STATUS = b"status/"  # Tópico para publicar o status
+        self.TOPICO_INTERVALO = b"intervalo"  # Tópico para receber valores do slider
 
         self.ultimo_comando_direita = 0
         self.ultimo_comando_esquerda = 0
+
+        self.potencia_maxima = 1023
 
         # Cliente MQTT será inicializado no método executar
         self.cliente = None
@@ -86,6 +89,16 @@ class Embarcado:
                 self.ligar_motor_virar_esquerda()
                 self.ultimo_comando_esquerda = time.time()
 
+        elif topico == self.TOPICO_INTERVALO:
+            try:
+                valor = int(msg)
+                if 10 <= valor <= 1023:
+                    self.ajustar_potencia(valor)
+                else:
+                    print(f"Valor de potência fora do intervalo: {valor}")
+            except ValueError:
+                print(f"Valor inválido recebido no tópico intervalo: {msg}")
+
     def publicar_status(self, estado):
         """Publica o estado atual no tópico de status."""
         if self.cliente:
@@ -107,7 +120,7 @@ class Embarcado:
 
     def ligar_motor_virar_direita(self):
         """Ligar motor para virar à direita"""
-        self.motor_virar_direita.duty(1023)
+        self.motor_virar_direita.duty(self.potencia_maxima)
         self.motor_virar_esquerda.duty(0)
 
     def desligar_motor_virar_direita(self):
@@ -116,7 +129,7 @@ class Embarcado:
 
     def ligar_motor_virar_esquerda(self):
         """Ligar motor para virar à esquerda"""
-        self.motor_virar_esquerda.duty(1023)
+        self.motor_virar_esquerda.duty(self.potencia_maxima)
         self.motor_virar_direita.duty(0)
 
     def desligar_motor_virar_esquerda(self):
@@ -130,6 +143,11 @@ class Embarcado:
     def desligar_led(self):
         """Desligar LED"""
         self.led.duty(0)
+
+    def ajustar_potencia(self, valor):
+        """Ajusta a potência dos motores de sustentação"""
+        print(f"Ajustando potência para: {valor}")
+        self.potencia_maxima = valor
 
     def setup(self):
         """Configurações iniciais do dispositivo embarcado."""
@@ -175,6 +193,7 @@ class Embarcado:
         # Inscreve nos tópicos MQTT
         cliente.subscribe(self.TOPICO_LIGAR)
         cliente.subscribe(self.TOPICO_MOVER)
+        cliente.subscribe(self.TOPICO_INTERVALO)
 
         # Loop principal para verificar mensagens MQTT e controlar timeout
         while True:
