@@ -6,17 +6,19 @@ from machine import PWM, Pin
 from umqtt.robust import MQTTClient
 
 # Configurações da rede WiFi
-SSID_WIFI = ""  # Nome da rede WiFi
-SENHA_WIFI = ""  # Senha da rede WiFi
+SSID_WIFI = "Claudiosalce"  # Nome da rede WiFi
+SENHA_WIFI = "eunaosei"  # Senha da rede WiFi
 MAX_TENTATIVAS = 20  # Número máximo de tentativas para conectar ao WiFi
 
 # Configurações do cliente MQTT
 NOME_CLIENTE = bytes("cliente_" + "12321", "utf-8")
-URL_BROKER_MQTT = ""  # Endereço do broker MQTT
+URL_BROKER_MQTT = "172.20.10.14"  # Endereço do broker MQTT
+TIMEOUT_VIRAR = 5
 
 class Embarcado:
     def __init__(self):
         # Inicializa os pinos para controle dos motores e LED
+
         # Defina os pinos conforme sua configuração
         self.pino_motor_sustentacao_1 = Pin(XX)  # Substitua XX pelo número do pino
         self.pino_motor_sustentacao_2 = Pin(XX)  # Substitua XX pelo número do pino
@@ -32,10 +34,15 @@ class Embarcado:
         self.led = PWM(self.pino_led, freq=1000, duty=0)
 
         # Inicializa os tópicos MQTT
-        self.TOPICO_LIGAR = b""  # Defina o tópico para ligar
-        self.TOPICO_DESLIGAR = b""  # Defina o tópico para desligar
-        self.TOPICO_VIRAR_DIREITA = b""  # Defina o tópico para virar à direita
-        self.TOPICO_VIRAR_ESQUERDA = b""  # Defina o tópico para virar à esquerda
+        self.TOPICO_LIGAR = b"ligar"  # Defina o tópico para ligar
+        self.TOPICO_MOVER = b"controle/motores"  # Defina o tópico para virar à direita
+        self.TOPICO_STATUS = b"status/"  # Tópico para publicar o status
+
+        self.ultimo_comando_direita = 0
+        self.ultimo_comando_esquerda = 0
+
+        # Cliente MQTT será inicializado no método executar
+        self.cliente = None
 
     def conectar_wifi(self):
         """Configura a interface WiFi e conecta à rede."""
@@ -64,21 +71,29 @@ class Embarcado:
             if msg == "on":
                 self.ligar_motores_sustentacao()
                 self.ligar_led()
+                self.publicar_status("ligado")
             elif msg == "off":
                 self.desligar_motores_sustentacao()
                 self.desligar_led()
+                self.publicar_status("desligado")
 
-        elif topico == self.TOPICO_VIRAR_DIREITA:
-            if msg == "on":
+        elif topico == self.TOPICO_MOVER:
+            if msg == "virar_direita":
                 self.ligar_motor_virar_direita()
-            elif msg == "off":
-                self.desligar_motor_virar_direita()
+                self.ultimo_comando_direita = time.time()
 
-        elif topico == self.TOPICO_VIRAR_ESQUERDA:
-            if msg == "on":
+            elif msg == "virar_esquerda":
                 self.ligar_motor_virar_esquerda()
-            elif msg == "off":
-                self.desligar_motor_virar_esquerda()
+                self.ultimo_comando_esquerda = time.time()
+
+    def publicar_status(self, estado):
+        """Publica o estado atual no tópico de status."""
+        if self.cliente:
+            try:
+                self.cliente.publish(self.TOPICO_STATUS, estado.encode())
+                print(f"Status publicado: {estado}")
+            except Exception as e:
+                print(f"Erro ao publicar status: {e}")
 
     def ligar_motores_sustentacao(self):
         """Ligar motores de sustentação"""
@@ -122,6 +137,7 @@ class Embarcado:
         self.desligar_motor_virar_direita()
         self.desligar_motor_virar_esquerda()
         self.desligar_led()
+        self.publicar_status("desligado")  # Publica o estado inicial
 
     def executar(self):
         """Método principal para executar as operações do dispositivo embarcado."""
@@ -158,17 +174,27 @@ class Embarcado:
 
         # Inscreve nos tópicos MQTT
         cliente.subscribe(self.TOPICO_LIGAR)
-        cliente.subscribe(self.TOPICO_VIRAR_DIREITA)
-        cliente.subscribe(self.TOPICO_VIRAR_ESQUERDA)
+        cliente.subscribe(self.TOPICO_MOVER)
 
-        # Loop principal para verificar mensagens MQTT
+        # Loop principal para verificar mensagens MQTT e controlar timeout
         while True:
             try:
                 cliente.check_msg()
+
+                current_time = time.time()
+
+                # Verifica timeout para virar à direita
+                if (current_time - self.ultimo_comando_direita) > TIMEOUT_VIRAR:
+                    self.desligar_motor_virar_direita()
+
+                # Verifica timeout para virar à esquerda
+                if (current_time - self.ultimo_comando_esquerda) > TIMEOUT_VIRAR:
+                    self.desligar_motor_virar_esquerda()
+
+                time.sleep(0.1)  # Pequena pausa para evitar sobrecarga
             except Exception:
                 cliente.disconnect()
                 sys.exit()
-
 
 # Instancia e executa a classe Embarcado
 if __name__ == "__main__":
